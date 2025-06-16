@@ -136,6 +136,14 @@ public:
     ////////////////////////////////////////////////////////////
     [[nodiscard]] static std::optional<std::string> getDevice();
 
+    ////////////////////////////////////////////////////////////
+    /// \brief Get the sample rate of the current audio playback device
+    ///
+    /// \return The sample rate of the current audio playback device or `std::nullopt` if there is none
+    ///
+    ////////////////////////////////////////////////////////////
+    [[nodiscard]] static std::optional<std::uint32_t> getDeviceSampleRate();
+
     struct ResourceEntry
     {
         using Func = void (*)(void*);
@@ -178,6 +186,16 @@ public:
     ///
     ////////////////////////////////////////////////////////////
     static void unregisterResource(ResourceEntryIter resourceEntry);
+
+    ////////////////////////////////////////////////////////////
+    /// \brief Wait for device reading to complete
+    ///
+    /// This is primarily used to ensure changes to the engine
+    /// node graph have been applied so the next read cycle does
+    /// not read from objects that have already been destroyed.
+    ///
+    ////////////////////////////////////////////////////////////
+    static void waitForReadingComplete();
 
     ////////////////////////////////////////////////////////////
     /// \brief Change the global volume of all the sounds and musics
@@ -370,12 +388,13 @@ private:
     ////////////////////////////////////////////////////////////
     // Member data
     ////////////////////////////////////////////////////////////
-    std::optional<ma_log>     m_log;            //!< The miniaudio log
-    std::optional<ma_context> m_context;        //!< The miniaudio context
-    std::optional<ma_device>  m_playbackDevice; //!< The miniaudio playback device
-    std::optional<ma_engine>  m_engine;         //!< The miniaudio engine (used for effects and spatialization)
-    ResourceEntryList         m_resources;      //!< Registered resources
-    std::mutex                m_resourcesMutex; //!< The mutex guarding the registered resources
+    std::optional<ma_log>     m_log;              //!< The miniaudio log
+    std::optional<ma_context> m_context;          //!< The miniaudio context
+    std::optional<ma_device>  m_playbackDevice;   //!< The miniaudio playback device
+    std::optional<ma_engine>  m_engine;           //!< The miniaudio engine (used for effects and spatialization)
+    ResourceEntryList         m_resources;        //!< Registered resources
+    std::mutex                m_resourcesMutex;   //!< The mutex guarding the registered resources
+    std::mutex                m_readingDataMutex; //!< The mutex guarding data reading cycles by the audio engine
 };
 
 } // namespace sf::priv

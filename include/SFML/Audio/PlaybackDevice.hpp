@@ -71,7 +71,7 @@ namespace sf::PlaybackDevice
 /// \brief Get the name of the default audio playback device
 ///
 /// This function returns the name of the default audio
-/// playback device. If none is available, an empty string
+/// playback device. If none is available, `std::nullopt`
 /// is returned.
 ///
 /// \return The name of the default audio playback device
@@ -106,5 +106,13 @@ namespace sf::PlaybackDevice
 ///
 ////////////////////////////////////////////////////////////
 [[nodiscard]] SFML_AUDIO_API std::optional<std::string> getDevice();
+
+////////////////////////////////////////////////////////////
+/// \brief Get the sample rate of the current audio playback device
+///
+/// \return The sample rate of the current audio playback device or `std::nullopt` if there is none
+///
+////////////////////////////////////////////////////////////
+[[nodiscard]] SFML_AUDIO_API std::optional<std::uint32_t> getDeviceSampleRate();
 
 } // namespace sf::PlaybackDevice

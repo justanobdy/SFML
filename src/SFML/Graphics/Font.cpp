@@ -154,24 +154,21 @@ bool Font::openFromFile(const std::filesystem::path& filename)
     // Cleanup the previous resources
     cleanup();
 
-#ifndef SFML_SYSTEM_ANDROID
-
     // Create the input stream and open the file
+#ifndef SFML_SYSTEM_ANDROID
     const auto stream = std::make_shared<FileInputStream>();
     const auto type   = "file"sv;
+#else
+    const auto stream = std::make_shared<priv::ResourceStream>();
+    const auto type   = "Android resource stream"sv;
+#endif
+
     if (!stream->open(filename))
     {
         err() << "Failed to load font (failed to open file): " << std::strerror(errno) << '\n'
               << formatDebugPathInfo(filename) << std::endl;
         return false;
     }
-
-#else
-
-    const auto stream = std::make_shared<priv::ResourceStream>(filename);
-    const auto type   = "Android resource stream"sv;
-
-#endif
 
     // Open the font, and if succesful save the stream to keep it alive
     if (openFromStreamImpl(*stream, type))
@@ -268,8 +265,15 @@ bool Font::hasGlyph(char32_t codePoint) const
 ////////////////////////////////////////////////////////////
 float Font::getKerning(std::uint32_t first, std::uint32_t second, unsigned int characterSize, bool bold) const
 {
-    // Special case where first or second is 0 (null character)
-    if (first == 0 || second == 0)
+    return getKerning(char32_t{first}, char32_t{second}, characterSize, bold);
+}
+
+
+////////////////////////////////////////////////////////////
+float Font::getKerning(char32_t first, char32_t second, unsigned int characterSize, bool bold) const
+{
+    // Special case where first or second is null character
+    if (first == U'\0' || second == U'\0')
         return 0.f;
 
     FT_Face face = m_fontHandles ? m_fontHandles->face : nullptr;

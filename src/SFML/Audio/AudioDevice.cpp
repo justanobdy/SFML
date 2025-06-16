@@ -291,6 +291,17 @@ std::optional<std::string> AudioDevice::getDevice()
 
 
 ////////////////////////////////////////////////////////////
+std::optional<std::uint32_t> AudioDevice::getDeviceSampleRate()
+{
+    auto* instance = getInstance();
+    if (instance && instance->m_playbackDevice)
+        return instance->m_playbackDevice->sampleRate;
+
+    return std::nullopt;
+}
+
+
+////////////////////////////////////////////////////////////
 AudioDevice::ResourceEntryIter AudioDevice::registerResource(void*               resource,
                                                              ResourceEntry::Func deinitializeFunc,
                                                              ResourceEntry::Func reinitializeFunc)
@@ -310,7 +321,15 @@ void AudioDevice::unregisterResource(AudioDevice::ResourceEntryIter resourceEntr
     auto* instance = getInstance();
     assert(instance && "AudioDevice instance should exist when calling AudioDevice::unregisterResource");
     const std::lock_guard lock(instance->m_resourcesMutex);
-    instance->m_resources.erase(resourceEntry);
+    instance->m_resources.erase(resourceEntry); // NOLINT(performance-unnecessary-value-param)
+}
+
+
+////////////////////////////////////////////////////////////
+void AudioDevice::waitForReadingComplete()
+{
+    // Once we can lock the reading mutex it means the engine read cycle has been completed
+    const std::lock_guard lock(getInstance()->m_readingDataMutex);
 }
 
 
@@ -488,6 +507,7 @@ bool AudioDevice::initialize()
 
         if (audioDevice.m_engine)
         {
+            const std::lock_guard lock(audioDevice.m_readingDataMutex);
             if (const auto result = ma_engine_read_pcm_frames(&*audioDevice.m_engine, output, frameCount, nullptr);
                 result != MA_SUCCESS)
                 err() << "Failed to read PCM frames from audio engine: " << ma_result_description(result) << std::endl;

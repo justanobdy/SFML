@@ -26,6 +26,7 @@ if(SFML_BUILD_GRAPHICS)
     add_subdirectory(opengl)
     add_subdirectory(stencil)
     add_subdirectory(text)
+    add_subdirectory(basic_filedrop)
 
     if(NOT SFML_OS_IOS)
         add_subdirectory(joystick)

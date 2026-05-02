@@ -65,6 +65,7 @@
 
 #include <cassert>
 #include <cstring>
+#include <iostream>
 
 #ifdef SFML_OPENGL_ES
 #include <SFML/Window/EglContext.hpp>
@@ -1936,6 +1937,19 @@ bool WindowImplX11::processEvent(XEvent& windowEvent)
             // Drag and drop position update
             if (windowEvent.xclient.message_type == getAtom("XdndPosition"))
             {
+                // Store position of mouse
+
+                sf::Vector2i absoluteMousePosition {0,0};
+
+                absoluteMousePosition.x = (windowEvent.xclient.data.l[2] >> 16) & 0xFFFF;
+                absoluteMousePosition.y = (windowEvent.xclient.data.l[2]) & 0xffff;
+
+                Window dummy;
+
+                XTranslateCoordinates(m_display.get(), XDefaultRootWindow(m_display.get()), m_window, absoluteMousePosition.x, absoluteMousePosition.y, &m_lastMousePosition.x, &m_lastMousePosition.y, &dummy);
+
+                std::cout << absoluteMousePosition.x << " " << absoluteMousePosition.y << "\n";
+
                 const Atom xdndStatus = XInternAtom(m_display.get(), "XdndStatus", false);
 
                 XEvent message;
@@ -1962,6 +1976,8 @@ bool WindowImplX11::processEvent(XEvent& windowEvent)
 
             if (windowEvent.xclient.message_type == getAtom("XdndEnter"))
             {
+                m_lastMousePosition = {0, 0};
+
                 // Store the source window
                 m_dropSource = static_cast<::Window>(windowEvent.xclient.data.l[0]);
 
@@ -2413,7 +2429,7 @@ bool WindowImplX11::processEvent(XEvent& windowEvent)
                         filename = filename.substring(0, filename.getSize() - 1);
                 }
 
-                pushEvent(Event::FilesDropped{filenamesVector, Mouse::getPosition()});
+                pushEvent(Event::FilesDropped{filenamesVector, m_lastMousePosition});
             }
 
             break;

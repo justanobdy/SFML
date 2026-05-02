@@ -1192,10 +1192,15 @@ void WindowImplWin32::processEvent(UINT message, WPARAM wParam, LPARAM lParam)
                 files.emplace_back(buffer.data());
             }
 
+            POINT point {0, 0};
+
+            // Get point that file was dropped at
+            DragQueryPoint(hDrop, &point);
+
             // Let the Windows API know we are done
             DragFinish(hDrop);
 
-            pushEvent(Event::FilesDropped{files, Mouse::getPosition()});
+            pushEvent(Event::FilesDropped{files, sf::Vector2i(point.x, point.y)});
             break;
         }
     }

@@ -235,6 +235,7 @@ private:
     ::Time   m_lastInputTime{};  ///< Last time we received user input
     ::Window m_dropSource{};     ///< The window which is giving the dropped item
     Atom m_acceptedFileType{}; ///< The MIME type that the other window supports that we also support for file dropping
+    Vector2i m_lastMousePosition{-1, -1}; ///< The last mouse position as given in XdndPosition
 };
 
 } // namespace sf::priv

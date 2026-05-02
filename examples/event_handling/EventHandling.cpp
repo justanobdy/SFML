@@ -27,6 +27,7 @@ std::string filesDroppedToString(const sf::Event::FilesDropped& filesDropped)
     {
         str += "\n- " + filename.toAnsiString();
     }
+    str += "\nWith position: " + std::to_string(filesDropped.position.x) + " " + std::to_string(filesDropped.position.y);
     return str;
 }
 } // namespace

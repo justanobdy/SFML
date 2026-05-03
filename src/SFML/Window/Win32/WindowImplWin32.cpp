@@ -139,7 +139,7 @@ void initRawMouse()
 namespace sf::priv
 {
 ////////////////////////////////////////////////////////////
-WindowImplWin32::WindowImplWin32(WindowHandle handle) : m_handle(handle)
+WindowImplWin32::WindowImplWin32(WindowHandle handle) : m_handle(handle), m_dropTarget(*this)
 {
     // Set that this process is DPI aware and can handle DPI scaling
     setProcessDpiAware();
@@ -171,7 +171,8 @@ WindowImplWin32::WindowImplWin32(VideoMode     mode,
                                  const ContextSettings& /*settings*/) :
     m_lastSize(mode.size),
     m_fullscreen(state == State::Fullscreen),
-    m_cursorGrabbed(m_fullscreen)
+    m_cursorGrabbed(m_fullscreen),
+    m_dropTarget(*this)
 {
     // Set that this process is DPI aware and can handle DPI scaling
     setProcessDpiAware();
@@ -253,6 +254,9 @@ WindowImplWin32::WindowImplWin32(VideoMode     mode,
 
     // Increment window count
     ++windowCount;
+
+    // Make sure OLE is initialized (mainly for drag & drop)
+    OleInitialize(NULL);
 }
 
 
@@ -304,7 +308,14 @@ WindowHandle WindowImplWin32::getNativeHandle() const
 
 void WindowImplWin32::setFileDroppingEnabled(bool enabled)
 {
-    DragAcceptFiles(m_handle, enabled);
+    if (enabled)
+    {
+        RegisterDragDrop(m_handle, static_cast<IDropTarget*>(&m_dropTarget));
+    }
+    else
+    {
+        RevokeDragDrop(m_handle);
+    }
 }
 
 ////////////////////////////////////////////////////////////
@@ -725,6 +736,11 @@ Keyboard::Scancode WindowImplWin32::toScancode(WPARAM wParam, LPARAM lParam)
         default: return Keyboard::Scan::Unknown;
     }
     // clang-format on
+}
+
+void WindowImplWin32::sendFilesDroppedEvent(const sf::Event::FilesDropped& event)
+{
+    pushEvent(event);
 }
 
 ////////////////////////////////////////////////////////////
@@ -1172,37 +1188,6 @@ void WindowImplWin32::processEvent(UINT message, WPARAM wParam, LPARAM lParam)
 
             break;
         }
-
-        // Files dropped event
-        case WM_DROPFILES:
-        {
-            auto* hDrop = reinterpret_cast<HDROP>(wParam);
-
-            const unsigned int count = DragQueryFileW(hDrop, 0xFFFFFFFF, nullptr, 0);
-
-            if (count == 0)
-                break;
-
-            // Get the filenames as wchar_t then add it to the files vector
-            std::vector<String> files;
-            for (unsigned int i = 0; i < count; i++)
-            {
-                std::vector<wchar_t> buffer(DragQueryFileW(hDrop, i, nullptr, 0) + 1);
-                DragQueryFileW(hDrop, i, buffer.data(), static_cast<UINT>(buffer.size()));
-                files.emplace_back(buffer.data());
-            }
-
-            POINT point {0, 0};
-
-            // Get point that file was dropped at
-            DragQueryPoint(hDrop, &point);
-
-            // Let the Windows API know we are done
-            DragFinish(hDrop);
-
-            pushEvent(Event::FilesDropped{files, sf::Vector2i(point.x, point.y)});
-            break;
-        }
     }
 }
 
@@ -1365,5 +1350,116 @@ LRESULT CALLBACK WindowImplWin32::globalOnEvent(HWND handle, UINT message, WPARA
 
     return DefWindowProcW(handle, message, wParam, lParam);
 }
+
+WindowImplWin32::DropTarget::DropTarget(WindowImplWin32& parent) : m_parent(parent)
+{
+}
+
+ULONG __stdcall WindowImplWin32::DropTarget::AddRef()
+{
+    InterlockedIncrement(&m_references);
+    return m_references;
+}
+
+#pragma warning(push)
+#pragma warning(disable:4100)
+// Functions required for COM
+ULONG __stdcall WindowImplWin32::DropTarget::Release()
+{
+    ULONG refCount = InterlockedDecrement(&m_references);
+
+    if (m_references == 0)
+    {
+        delete this;
+        return 0;
+    }
+
+    return refCount;
+}
+
+HRESULT __stdcall WindowImplWin32::DropTarget::QueryInterface(REFIID riid, void** ppvObject)
+{
+    if (riid == __uuidof(IDropTarget))
+    {
+        *ppvObject = static_cast<IUnknown*>(this);
+        this->AddRef();
+        return S_OK;
+    }
+
+    return E_NOINTERFACE;
+}
+
+HRESULT __stdcall WindowImplWin32::DropTarget::DragEnter(IDataObject* pDataObj, DWORD grfKeyState, POINTL pt, DWORD* pdwEffect)
+{
+    *pdwEffect |= DROPEFFECT_COPY;
+
+    return S_OK;
+}
+
+HRESULT __stdcall WindowImplWin32::DropTarget::DragOver(DWORD grfKeyState, POINTL pt, DWORD* pdwEffect)
+{
+    *pdwEffect |= DROPEFFECT_COPY;
+
+    return S_OK;
+}
+
+HRESULT __stdcall WindowImplWin32::DropTarget::DragLeave()
+{
+    return S_OK;
+}
+
+HRESULT __stdcall WindowImplWin32::DropTarget::Drop(IDataObject* pDataObj, DWORD grfKeyState, POINTL pt, DWORD* pdwEffect)
+{
+    *pdwEffect |= DROPEFFECT_COPY;
+
+    // format filter for filenames
+    FORMATETC format{CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+
+    // Make sure the app supports files
+    // TODO: add to DragEnter and DragOver (deny drops if not compatible)
+    if (pDataObj->QueryGetData(&format) == S_OK)
+    {
+        // Get data
+        STGMEDIUM medium;
+        medium.tymed = TYMED_HGLOBAL;
+        pDataObj->GetData(&format, &medium);
+
+        HDROP hDrop = reinterpret_cast<HDROP>(medium.hGlobal);
+
+        const unsigned int count = DragQueryFileW(hDrop, 0xFFFFFFFF, nullptr, 0);
+
+        if (count == 0)
+        {
+            *pdwEffect |= DROPEFFECT_NONE;
+            return E_UNEXPECTED; // Should be something else?
+        }
+
+        // Get the filenames as wchar_t then add it to the files vector
+        std::vector<String> files;
+        for (unsigned int i = 0; i < count; i++)
+        {
+            std::vector<wchar_t> buffer(DragQueryFileW(hDrop, i, nullptr, 0) + 1);
+            DragQueryFileW(hDrop, i, buffer.data(), static_cast<UINT>(buffer.size()));
+            files.emplace_back(buffer.data());
+        }
+
+        POINT point {pt.x, pt.y};
+
+        // Make sure we are using relative coordinates
+        ScreenToClient(m_parent.m_handle, &point);
+
+        m_parent.sendFilesDroppedEvent({files, sf::Vector2i{point.x, point.y}});
+
+        ReleaseStgMedium(&medium);
+    }
+    else
+    {
+        // Don't do anything if it doesn't support only filenames
+        *pdwEffect |= DROPEFFECT_NONE;
+    }
+
+    return S_OK;
+}
+#pragma warning(pop)
 
 } // namespace sf::priv

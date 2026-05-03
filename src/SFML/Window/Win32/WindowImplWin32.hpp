@@ -37,6 +37,9 @@
 
 #include <cstdint>
 
+#include <oleidl.h>
+#include <shellapi.h>
+#include <ole2.h>
 
 namespace sf
 {
@@ -196,6 +199,44 @@ private:
     ////////////////////////////////////////////////////////////
     static Keyboard::Scancode toScancode(WPARAM wParam, LPARAM lParam);
 
+    // Function to allow DropTarget to send events
+    void sendFilesDroppedEvent(const sf::Event::FilesDropped& event);
+
+    friend class DropTarget;
+
+    class DropTarget : IDropTarget
+    {
+    public:
+        friend class WindowImplWin32;
+
+        DropTarget(WindowImplWin32& parent);
+
+        ULONG STDMETHODCALLTYPE AddRef() override;
+
+        ULONG STDMETHODCALLTYPE Release() override;
+
+        HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppvObject) override;
+
+        // Function when mouse enters window
+        HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* pDataObj, DWORD grfKeyState, POINTL pt, DWORD* pdwEffect) override;
+
+        // Function when mouse hovers over window with drop item
+        HRESULT STDMETHODCALLTYPE DragOver(DWORD grfKeyState, POINTL pt, DWORD* pdwEffect) override;
+
+        // Function when mouse leaves the window
+        HRESULT STDMETHODCALLTYPE DragLeave() override;
+
+        // Function when an item is dropped
+        HRESULT STDMETHODCALLTYPE Drop(IDataObject* pDataObj, DWORD grfKeyState, POINTL pt, DWORD* pdwEffect) override;
+
+    private:
+        // Reference counter needed for COM
+        uint32_t m_references = 1;
+
+        // Needed so DropTarget can interact with WindowImpl
+        WindowImplWin32& m_parent;
+    };
+
     ////////////////////////////////////////////////////////////
     // Member data
     ////////////////////////////////////////////////////////////
@@ -212,6 +253,7 @@ private:
     bool m_mouseInside{};   //!< Mouse is inside the window?
     bool m_fullscreen{};    //!< Is the window fullscreen?
     bool m_cursorGrabbed{}; //!< Is the mouse cursor trapped?
+    DropTarget m_dropTarget;
 };
 
 } // namespace priv
